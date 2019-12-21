@@ -106,8 +106,8 @@ public class AsIntStream implements IntStream {
             }
 
             private void seekNext() {
-                while (toConsume == null &&
-                        AsIntStream.this.iterator.hasNext()) {
+                while (toConsume == null
+                        && AsIntStream.this.iterator.hasNext()) {
                     Integer current = AsIntStream.this.iterator.next();
                     if (predicate.test(current)) {
                         toConsume = current;
