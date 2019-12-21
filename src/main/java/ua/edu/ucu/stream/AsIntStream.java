@@ -1,20 +1,23 @@
 package ua.edu.ucu.stream;
 
-import ua.edu.ucu.function.*;
+import ua.edu.ucu.function.IntBinaryOperator;
+import ua.edu.ucu.function.IntConsumer;
+import ua.edu.ucu.function.IntPredicate;
+import ua.edu.ucu.function.IntToIntStreamFunction;
+import ua.edu.ucu.function.IntUnaryOperator;
 
 import java.util.*;
 
-
 public class AsIntStream implements IntStream {
 
-    private final Iterator<Integer> it;
+    private final Iterator<Integer> iterator;
 
     private AsIntStream(final Iterator<Integer> it) {
-        this.it = it;
+        this.iterator = it;
     }
 
     private void ensureNonEmpty() {
-        if (!it.hasNext()) {
+        if (!iterator.hasNext()) {
             throw new IllegalArgumentException();
         }
     }
@@ -31,6 +34,9 @@ public class AsIntStream implements IntStream {
 
             @Override
             public Integer next() {
+                if (current > copied.length - 1) {
+                    throw new NoSuchElementException();
+                }
                 return copied[current++];
             }
         };
@@ -42,8 +48,8 @@ public class AsIntStream implements IntStream {
         ensureNonEmpty();
         double sum = 0;
         int count = 0;
-        while (it.hasNext()) {
-            sum += it.next();
+        while (iterator.hasNext()) {
+            sum += iterator.next();
             count++;
         }
         return sum / count;
@@ -67,9 +73,9 @@ public class AsIntStream implements IntStream {
     @Override
     public long count() {
         int count = 0;
-        while (it.hasNext()) {
+        while (iterator.hasNext()) {
             count++;
-            it.next();
+            iterator.next();
         }
         return count;
     }
@@ -78,8 +84,8 @@ public class AsIntStream implements IntStream {
     public Integer sum() {
         ensureNonEmpty();
         int sum = 0;
-        while (it.hasNext()) {
-            sum += it.next();
+        while (iterator.hasNext()) {
+            sum += iterator.next();
         }
         return sum;
     }
@@ -100,8 +106,9 @@ public class AsIntStream implements IntStream {
             }
 
             private void seekNext() {
-                while (toConsume == null && AsIntStream.this.it.hasNext()) {
-                    Integer current = AsIntStream.this.it.next();
+                while (toConsume == null &&
+                        AsIntStream.this.iterator.hasNext()) {
+                    Integer current = AsIntStream.this.iterator.next();
                     if (predicate.test(current)) {
                         toConsume = current;
                     }
@@ -126,8 +133,8 @@ public class AsIntStream implements IntStream {
 
     @Override
     public void forEach(IntConsumer action) {
-        while (it.hasNext()) {
-            action.accept(it.next());
+        while (iterator.hasNext()) {
+            action.accept(iterator.next());
         }
     }
 
@@ -136,12 +143,12 @@ public class AsIntStream implements IntStream {
         Iterator<Integer> it = new Iterator<Integer>() {
             @Override
             public boolean hasNext() {
-                return AsIntStream.this.it.hasNext();
+                return AsIntStream.this.iterator.hasNext();
             }
 
             @Override
             public Integer next() {
-                return mapper.apply(AsIntStream.this.it.next());
+                return mapper.apply(AsIntStream.this.iterator.next());
             }
         };
         return new AsIntStream(it);
@@ -149,48 +156,56 @@ public class AsIntStream implements IntStream {
 
     @Override
     public IntStream flatMap(IntToIntStreamFunction func) {
-        Iterator<Integer> it = new Iterator<Integer>() {
-            private AsIntStream substream;
+        return new AsIntStream(new StreamingIterator(func));
+    }
 
-            //find next substream which will be used
-            private void seekSubStream() {
-                substream = null;
-                // go to source iterator, convert, check
-                while (substream == null && AsIntStream.this.it.hasNext()) {
-                    IntStream stream = func.applyAsIntStream(AsIntStream.this.it.next());
-                    substream = (AsIntStream) of(stream.toArray());
-                    if (!substream.it.hasNext()) {
-                        substream = null;
-                    }
-                }
+    private class StreamingIterator implements Iterator<Integer> {
 
-            }
+        private final IntToIntStreamFunction func;
+        private AsIntStream substream;
 
-            @Override
-            public boolean hasNext() {
-                if (substream == null || !substream.it.hasNext()) {
-                    seekSubStream();
-                }
-                return substream != null && substream.it.hasNext();
-            }
+        private StreamingIterator(final IntToIntStreamFunction func) {
+            this.func = func;
+        }
 
-            @Override
-            public Integer next() {
-                if (hasNext()) {
-                    return substream.it.next();
-                } else {
-                    throw new IllegalArgumentException();
+        //find next substream which will be used
+        private void seekSubStream() {
+            substream = null;
+            // go to source iterator, convert, check
+            while (substream == null && AsIntStream.
+                    this.iterator.hasNext()) {
+                IntStream stream = func.applyAsIntStream(AsIntStream.
+                        this.iterator.next());
+                substream = (AsIntStream) of(stream.toArray());
+                if (!substream.iterator.hasNext()) {
+                    substream = null;
                 }
             }
-        };
-        return new AsIntStream(it);
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (substream == null || !substream.iterator.hasNext()) {
+                seekSubStream();
+            }
+            return substream != null && substream.iterator.hasNext();
+        }
+
+        @Override
+        public Integer next() {
+            if (hasNext()) {
+                return substream.iterator.next();
+            } else {
+                throw new IllegalArgumentException();
+            }
+        }
     }
 
     @Override
     public int reduce(int identity, IntBinaryOperator op) {
         int value = identity;
-        while (it.hasNext()) {
-            value = op.apply(value, it.next());
+        while (iterator.hasNext()) {
+            value = op.apply(value, iterator.next());
         }
         return value;
     }
@@ -198,8 +213,8 @@ public class AsIntStream implements IntStream {
     @Override
     public int[] toArray() {
         final List<Integer> list = new LinkedList<>();
-        while (it.hasNext()) {
-            list.add(it.next());
+        while (iterator.hasNext()) {
+            list.add(iterator.next());
         }
         int[] array = new int[list.size()];
         for (int i = 0; i < array.length; i++) {
